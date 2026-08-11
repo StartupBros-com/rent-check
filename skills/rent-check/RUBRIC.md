@@ -231,7 +231,10 @@ agent(s) the repo actually uses (quotes and sources: EVIDENCE.md).
   nothing overrides. Codex: one file per directory from project root down to
   cwd, concatenated with nearer files later in the prompt, capped at 32 KiB
   (`project_doc_max_bytes`) — and the cap truncates the MOST SPECIFIC files
-  first in deep trees. The agents.md convention says "closest file wins,"
+  first in deep trees. The cap covers the PROJECT chain only: the global
+  `AGENTS.md` loads in full, uncapped, via a separate code path
+  `[source-verified on openai/codex: config_toml.rs:70, agents_md.rs:130,
+  codex-home/src/instructions/mod.rs]`. The agents.md convention says "closest file wins,"
   but nested discovery is a Codex-specific extension, not base spec
   `[single-source]`. Consequence: a child rule meant to override a parent
   must SAY so ("overrides root rule X: ...") — position alone is not
