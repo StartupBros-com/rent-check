@@ -1,0 +1,68 @@
+name: CI
+
+# A skill repo has no unit tests to run, but it does have a contract the
+# marketplace enforces at release time: VERSION, the plugin manifest, and the
+# release tag move in lockstep, and the announce train stays on the shared
+# OIDC workflow. Checking it here means a mistake fails on the PR that causes
+# it, not silently after a release is already public.
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: contract
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@ac593985615ec2ede58e132d2e21d2b1cbd6127c
+        with:
+          persist-credentials: false
+
+      - name: VERSION and plugin manifest move in lockstep
+        run: |
+          version="$(tr -d '[:space:]' < VERSION)"
+          manifest="$(jq -er '.version' .claude-plugin/plugin.json)"
+          printf 'VERSION=%s plugin.json=%s\n' "$version" "$manifest"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "::error::VERSION '$version' is not semver"; exit 1 ;;
+          esac
+          [ "$version" = "$manifest" ] || {
+            echo "::error::VERSION $version != plugin.json $manifest — the announce train refuses to post on a mismatch"
+            exit 1
+          }
+
+      - name: Plugin manifest names this repo
+        run: |
+          name="$(jq -er '.name' .claude-plugin/plugin.json)"
+          [ "$name" = "${GITHUB_REPOSITORY#*/}" ] || {
+            echo "::error::plugin.json name '$name' does not match the repository"
+            exit 1
+          }
+          test -f "skills/$name/SKILL.md" || {
+            echo "::error::missing skills/$name/SKILL.md — the marketplace validator requires it"
+            exit 1
+          }
+
+      - name: Announce train stays on the shared OIDC workflow
+        run: |
+          wf=.github/workflows/release-train.yml
+          test -f "$wf" || { echo "::error::missing $wf"; exit 1; }
+          grep -Eq 'hov-tool-drop-announce\.yml@[0-9a-f]{40}' "$wf" || {
+            echo "::error::release train must call the shared announce workflow pinned to a full commit SHA"
+            exit 1
+          }
+          grep -Eq '^[[:space:]]*id-token:[[:space:]]*write[[:space:]]*$' "$wf" || {
+            echo "::error::release train needs id-token: write for OIDC"
+            exit 1
+          }
+          ! grep -Fq 'TOOL_RELEASE_ANNOUNCE_SECRET' "$wf" || {
+            echo "::error::static announce secret is forbidden; identity is OIDC"
+            exit 1
+          }
