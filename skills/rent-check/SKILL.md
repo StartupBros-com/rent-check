@@ -39,6 +39,10 @@ contested verdicts, and portability to any harness (Codex, CI, custom agents).
 - `MEASURE.md` — experiment design for contested verdicts: isolation, grading,
   statistics, and reporting rules for testing whether a specific rule changes
   agent behavior. Read it only when a MEASURE verdict is issued.
+- `APPLY.md` — follow-through discipline for the session that applies the
+  verdicts (worktree/PR shape, gate-read-before-delete, mutation-proofing,
+  the memory-consolidator boundary). Read it only when the operator starts
+  the apply phase.
 - `CREDITS.md` — every source artifact, its license, and which concept came
   from where.
 
@@ -90,12 +94,16 @@ record each file's layer (root / package / deeper) and which agent(s)
 consume it — layered trees get the M-family checks in RUBRIC.md. For each record: path,
 load class (always-loaded / on-invocation / on-read), and approximate size.
 In Claude Code, ground the always-loaded numbers in real `/context` output.
-Interactive session (a human typed the invocation): the first thing you say
-to the operator in this phase is a request to run `/context` and paste the
-output — before spawning collectors is ideal, since the paste grounds the
-whole inventory. The report may claim `/context` was unavailable only when
-the run was genuinely non-interactive or the operator declined; state
-which. Estimates (chars/4) are the fallback, labeled per number. Count deferred/on-demand material at its trigger cost
+Interactive session (a human typed the invocation): open this phase with
+ONE structured question via the harness's question tool (`AskUserQuestion`
+in Claude Code) — "paste `/context` output for measured numbers, or
+proceed on estimates?" — before spawning collectors, since the paste
+grounds the whole inventory. The report may claim `/context` was
+unavailable only when the run was genuinely non-interactive or the
+operator chose estimates; state which. Estimates (chars/4) are the
+fallback, labeled per number — and treated as FLOORS: calibrated twice
+against live `/context`, chars/4 under-measured dense markdown prose by
+1.5–1.7x, so never present an estimate as an upper bound. [measured-here] Count deferred/on-demand material at its trigger cost
 (description or pointer), never at body size.
 
 *Done when:* every source has all three fields, and the inventory states
@@ -116,6 +124,13 @@ first (deterministic — dead references, command/lockfile drift, loading
 mechanics), then rule-quality checks, then enforcement backing, then
 portfolio checks if the scope includes skills/memory. Record each finding
 as: check ID, evidence tier, the specific line(s), and the failure.
+
+When checks are delegated to collector subagents, gate their outputs on
+citations: a finding without a file:line reference and the verification
+performed is a FAILED collector, not a finding — re-run that collector
+with a tightened prompt, never adjudicate uncited output. Schema-valid is
+not substance: a dogfood run received literal placeholder junk that
+passed schema validation. [measured-here]
 
 Maintain a **coverage matrix** as you go: one row per audited source, one
 column per rubric family, each cell `finding(s) | clean | skipped: <reason>
@@ -147,6 +162,23 @@ that verdict expires on model upgrades, so date it.
 *Done when:* every finding from Phase 3 has exactly one verdict and every
 CUT/PROMOTE names what replaces the deleted prose (a gate, a pointer, or
 nothing — stated explicitly).
+
+### Phase 4.5 — Adversarial verify
+
+Before the report ships, every change-proposing verdict (FIX / PROMOTE /
+DEMOTE / MERGE / CUT) gets an independent refute attempt. Batch by target
+file — one verifier per file, never per finding, and the verify fleet
+never larger than the number of files with findings. Each verifier
+re-derives the facts from live state (repo tree, configs, rulesets,
+frontmatter) with a refute-by-default prompt and WITHOUT the audit's
+reasoning, so it cannot inherit the audit's mistakes. A cheap model tier
+is sufficient — this is fact-checking, not judgment. A refuted verdict is
+downgraded to MEASURE or dropped, with the refutation quoted in the
+report; a verdict that survives carries `verified` in its table row.
+KEEP verdicts and note-only findings skip the pass (they change nothing).
+
+*Done when:* every change-proposing verdict is marked verified, downgraded,
+or dropped — none unexamined.
 
 ### Phase 5 — Report
 
@@ -194,11 +226,21 @@ Emit the report before any edit. Required sections, in order:
 *Done when:* all seven sections are present, every draft lives under the
 run directory, and no audited file was modified.
 
+**Closing question (interactive sessions only, after the report is fully
+emitted):** one structured question routing the next step — typical
+options: apply the drafts now (follow-through per `APPLY.md`), run the
+memory consolidator, file the ops actions as issues, run a MEASURE
+experiment, or stop here. Multi-select; "stop here" is always an option;
+the report stands complete regardless of the answer. Questions collect
+decisions, never findings — the audit never asks the operator to
+adjudicate a check it could verify itself.
+
 ### Phase 6 — Measure (only if MEASURE verdicts exist)
 
 For each MEASURE verdict, read `MEASURE.md` and either run the experiment
-(operator approves the spend first — state the planned run count and cost
-before executing) or record it as an open question with the exact design
+(operator approves the spend first — in an interactive session, ask as a
+structured question with the planned run count and cost estimate in the
+option labels) or record it as an open question with the exact design
 that would settle it.
 
 *Done when:* each MEASURE verdict has a result or a written, runnable design.
