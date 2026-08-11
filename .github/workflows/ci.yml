@@ -66,3 +66,40 @@ jobs:
             echo "::error::static announce secret is forbidden; identity is OIDC"
             exit 1
           }
+
+      # A well-formed SHA is not a working one. This repo sat on c981b872 while
+      # the announce workflow moved to a version whose script mints its own OIDC
+      # token from ACTIONS_ID_TOKEN_REQUEST_* -- env the old workflow never
+      # exported -- so the next release would have failed at token minting with
+      # a green CI.
+      #
+      # Compare the pinned workflow's CONTENT against marketplace main, not
+      # commit identity: most marketplace commits do not touch this file, and a
+      # merge commit can carry content identical to its parent. Only a content
+      # difference can actually change release behaviour, so only that fails.
+      - name: Announce workflow pin is current
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          wf=.github/workflows/release-train.yml
+          path=.github/workflows/hov-tool-drop-announce.yml
+          pinned="$(grep -oE 'hov-tool-drop-announce\.yml@[0-9a-f]{40}' "$wf" | head -1 | cut -d@ -f2)"
+          [ -n "$pinned" ] || { echo "::error::no pinned announce workflow SHA found"; exit 1; }
+
+          fetch() {
+            gh api "repos/StartupBros-com/hov-marketplace/contents/${path}?ref=$1" \
+              --jq '.content' 2>/dev/null | base64 -d 2>/dev/null | sha256sum | cut -d' ' -f1
+          }
+          pinned_hash="$(fetch "$pinned")" || true
+          main_hash="$(fetch main)" || true
+          if [ -z "$pinned_hash" ] || [ -z "$main_hash" ]; then
+            echo "::notice::could not read the announce workflow from the marketplace; skipping drift check"
+            exit 0
+          fi
+          if [ "$pinned_hash" = "$main_hash" ]; then
+            printf 'pin %s carries the current announce workflow\n' "${pinned:0:8}"
+            exit 0
+          fi
+          echo "::error::release-train pins hov-tool-drop-announce.yml@${pinned}, whose content differs from marketplace main. Repin to the current SHA -- a stale pin fails at release time, not here."
+          exit 1
