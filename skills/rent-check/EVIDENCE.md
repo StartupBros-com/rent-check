@@ -117,8 +117,13 @@ leads, not laws.
   from project root down to cwd plus a global file, "concatenates files
   from the root down"; "Files closer to your current directory override
   earlier guidance because they appear later in the combined prompt";
-  combined size capped by `project_doc_max_bytes` (32 KiB default), which
-  truncates leaf files first. `AGENTS.override.md` fully replaces (not
+  PROJECT-chain size capped by `project_doc_max_bytes` (32 KiB default),
+  which truncates leaf files first; the global file is exempt — it loads in
+  full via a separate uncapped path (source-verified 2026-08-11 against the
+  openai/codex implementation: cap constant `config_toml.rs:70`, leaf-first
+  truncation `agents_md.rs:130`, uncapped global read
+  `codex-home/src/instructions/mod.rs:24-67` — a foreign-repo audit
+  corrected this entry's earlier doc-derived wording). `AGENTS.override.md` fully replaces (not
   merges) the same directory's AGENTS.md and is git-tracked by default.
   (developers.openai.com/codex/agent-configuration/agents-md)
 - **agents.md convention** — "The closest AGENTS.md to the edited file

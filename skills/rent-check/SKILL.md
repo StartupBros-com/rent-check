@@ -130,7 +130,12 @@ citations: a finding without a file:line reference and the verification
 performed is a FAILED collector, not a finding — re-run that collector
 with a tightened prompt, never adjudicate uncited output. Schema-valid is
 not substance: a dogfood run received literal placeholder junk that
-passed schema validation. [measured-here]
+passed schema validation. [measured-here] Match the output contract to
+the pass shape: strict schemas fit inventory-shaped collectors (counts,
+lists, small enumerables); multi-part ANALYSIS passes want plain cited
+markdown — across two dogfood runs, every schema failure (junk output,
+retry-cap death) hit an analysis-shaped pass, and every plain-markdown
+re-run of the same pass succeeded. [measured-here]
 
 Maintain a **coverage matrix** as you go: one row per audited source, one
 column per rubric family, each cell `finding(s) | clean | skipped: <reason>
