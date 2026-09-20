@@ -164,6 +164,15 @@ Apply the removal test honestly: "would the agent do something worse without
 this line?" A rule that documents the model's current default fails — and
 that verdict expires on model upgrades, so date it.
 
+The mirror test, before any FIX or PROMOTE rests on a transcript: would a
+competent agent with the current instructions still be expected to fail this
+way? If yes, there is a gap. If no, either the line already required the
+behavior and the model ignored it, or the failure is model variance (same
+prompt, same tools, different choice): neither is a FIX, and a PROMOTE still
+needs thesis 2's grounds (an invariant-shaped rule with no enforcement
+backing), not the one bad turn. When nothing clears this bar the verdict is
+KEEP with that reason recorded; a speculative change is worse than none.
+
 *Done when:* every finding from Phase 3 has exactly one verdict and every
 CUT/PROMOTE names what replaces the deleted prose (a gate, a pointer, or
 nothing — stated explicitly).
