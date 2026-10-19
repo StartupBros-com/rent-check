@@ -78,7 +78,7 @@ leads, not laws.
 
 ## First-party (Anthropic, verified against product and posts)
 
-- **`/doctor`** (alias `/checkup`; bundled skill v2.1.203+, CLAUDE.md trim
+- **`/doctor`** (alias `/checkup`; full checkup v2.1.205+, CLAUDE.md trim
   v2.1.206+) — 10 checks including unused-extension detection vs context
   cost, CLAUDE.md dedup, derivable-content trim, always-loaded→lazy
   migration, slow-hook flagging. Confirm-gated. Verified three ways: binary

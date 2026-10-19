@@ -22,7 +22,8 @@ Every always-loaded line costs tokens on every turn — so every line pays
 rent or gets cut. Sibling of `harness-vet`
 (that one gates *external* artifacts before adoption; this one audits the
 context files and always-loaded surface you already own). Distinct from
-Claude Code's built-in `/doctor` (v2.1.206+), which owns generic rightsizing
+Claude Code's built-in `/doctor` (full checkup v2.1.205+; its CLAUDE.md trim
+check v2.1.206+), which owns generic rightsizing
 inside a live session: rent-check adds what `/doctor` cannot — evidence
 citations per check, enforcement-backing analysis, measurement routing for
 contested verdicts, and portability to any harness (Codex, CI, custom agents).
@@ -45,6 +46,9 @@ contested verdicts, and portability to any harness (Codex, CI, custom agents).
   the apply phase.
 - `CREDITS.md` — every source artifact, its license, and which concept came
   from where.
+- `bin/rent-check.py` — the deterministic engine (Python 3 stdlib, no
+  dependencies, `--json` on every subcommand). Facts and worklists only.
+  Run it in Phase 1 and consume its output for the rest of the audit.
 
 ## Doctrine (the four theses every verdict follows)
 
@@ -87,12 +91,49 @@ carried-forward files.
 
 ### Phase 1 — Inventory
 
-List every context source that reaches the agent: root and nested context
-files, user-global files, rules dirs, skill/agent/command descriptions,
-memory indexes, MCP tool listings, output styles. In a multi-file tree,
-record each file's layer (root / package / deeper) and which agent(s)
-consume it — layered trees get the M-family checks in RUBRIC.md. For each record: path,
-load class (always-loaded / on-invocation / on-read), and approximate size.
+**Discovery is one command, run once, and every later pass consumes its
+output — never its own search.** Run the bundled engine, which owns every
+fact in this phase (file list, load class, bytes, calibrated tokens,
+git-blob fingerprints):
+
+```sh
+python3 "$SKILL_DIR/bin/rent-check.py" inventory <root> --json
+```
+
+The engine exists because this skill's own doctrine (#2: enforcement beats
+prose) applies reflexively — a check stated as prose runs only if the
+auditor bothers, and two runs are comparable only if a script, not
+diligence, produced the numbers. It emits facts and worklists, never
+verdicts; judgment stays with you. `rent-check.py --help` lists every
+subcommand with the rubric ID it serves — the binary is the authority for
+its own surface (L2), so that list is not duplicated here. Each has a
+fixture suite (`bin/rent-check.test.py`) asserting it fires on known-bad
+input as well as passing on known-good — a check that cannot fail measures
+nothing.
+
+If Python is unavailable, fall back to the equivalent `find` below and say
+so in the report; never silently substitute a narrower search:
+
+```sh
+find . \( -name node_modules -o -name .git -o -name .next -o -name dist \
+       -o -name vendor -o -path '*/.claude/worktrees' -o -path '*/.worktrees' \) -prune \
+  -o -type f \( -name 'AGENTS.md' -o -name 'CLAUDE.md' -o -name 'CLAUDE.local.md' \
+       -o -name '.cursorrules' -o -name 'copilot-instructions.md' \) -print | sort
+```
+
+A depth cap is silent truncation: it produces a coverage matrix with no
+empty cells that is nonetheless incomplete, which is worse than an
+acknowledged gap. Record the file count and the exact command in the
+report; if you prune anything beyond the list above, name it. Then add the
+non-file sources: rules dirs, skill/agent/command descriptions, memory
+indexes, MCP tool listings, output styles. In a multi-file tree, record
+each file's layer (root / package / deeper) and which agent(s) consume it
+— layered trees get the M-family checks in RUBRIC.md. For each record:
+path, load class (always-loaded / on-invocation / on-read), and size.
+
+Measured: a `-maxdepth 4` inventory found 14 of 15 context files in one
+audited repo and **31 of 43** in another — the misses were invisible in
+both reports. [measured-here]
 In Claude Code, ground the always-loaded numbers in real `/context` output.
 Interactive session (a human typed the invocation): open this phase with
 ONE structured question via the harness's question tool (`AskUserQuestion`
@@ -106,8 +147,10 @@ against live `/context`, chars/4 under-measured dense markdown prose by
 1.5–1.7x, so never present an estimate as an upper bound. [measured-here] Count deferred/on-demand material at its trigger cost
 (description or pointer), never at body size.
 
-*Done when:* every source has all three fields, and the inventory states
-whether numbers are measured or estimated.
+*Done when:* every source has all three fields; the inventory states
+whether numbers are measured or estimated; and the report carries the
+discovery command plus its file count, which every later phase treats as
+the authoritative file list.
 
 ### Phase 2 — Budget ranking
 
@@ -139,7 +182,9 @@ re-run of the same pass succeeded. [measured-here]
 
 Maintain a **coverage matrix** as you go: one row per audited source, one
 column per rubric family, each cell `finding(s) | clean | skipped: <reason>
-| n/a`. The matrix is the completion bound made visible — it is what makes
+| n/a`. Its rows must equal Phase 1's discovered file list exactly — if a
+collector surfaces a file the matrix lacks, discovery under-counted: fix
+Phase 1 and re-derive rather than patching the row in. The matrix is the completion bound made visible — it is what makes
 two runs on the same target comparable and keeps coverage from depending on
 who executes the audit.
 
@@ -182,17 +227,43 @@ nothing — stated explicitly).
 Before the report ships, every change-proposing verdict (FIX / PROMOTE /
 DEMOTE / MERGE / CUT) gets an independent refute attempt. Batch by target
 file — one verifier per file, never per finding, and the verify fleet
-never larger than the number of files with findings. Each verifier
+never larger than the number of files with findings. **Quote-match before you spend a verifier.** For every finding that quotes
+source text, first grep the quoted string against the file:line it cites. A
+quote that is not there means the finding is fabricated or mis-cited — drop
+it now, before any model reasons about it. This is a grep, not a judgment,
+and it catches the failure mode this skill has already produced: a dogfood
+run returned literal placeholder junk that passed schema validation. (The
+`skill-tuner` plugin's `tune.py probe` implements the same idea as
+`quote_not_found`; the check is borrowed, not the dependency.)
+
+Each verifier
 re-derives the facts from live state (repo tree, configs, rulesets,
 frontmatter) with a refute-by-default prompt and WITHOUT the audit's
 reasoning, so it cannot inherit the audit's mistakes. A cheap model tier
 is sufficient — this is fact-checking, not judgment. A refuted verdict is
 downgraded to MEASURE or dropped, with the refutation quoted in the
 report; a verdict that survives carries `verified` in its table row.
-KEEP verdicts and note-only findings skip the pass (they change nothing).
+
+**The counter-finding is verified too — it is the highest-risk KEEP in the
+report.** A KEEP changes no bytes, but it asserts *this text is correct and
+earns its rent*, and a wrong KEEP is worse than a wrong CUT: it launders a
+falsehood as audited-good, and the operator now has a citation for it. The
+Phase 5 counter-finding is the one the audit vouches for hardest, so it is
+the one an exemption most endangers. Fact-check every claim inside it
+against live state — the same refute-by-default pass, same cheap tier. Any
+other KEEP whose text makes a checkable factual assertion (a permission
+level, a service-account identity, a count, a version, a threshold) rides
+the same pass; only KEEPs that assert pure policy or preference skip it.
+
+Dogfood receipt: a run declared a GSC block its counter-finding — "a model
+rent-payer… should not be touched" — while that block claimed a service
+account held `siteFullUser` on two properties. Live `gsc sites` returned
+`siteOwner` on eight. Nothing checked it, *because* it was a KEEP.
+[measured-here]
 
 *Done when:* every change-proposing verdict is marked verified, downgraded,
-or dropped — none unexamined.
+or dropped, and the counter-finding plus every fact-asserting KEEP carries
+the same `verified` mark — none unexamined.
 
 ### Phase 5 — Report
 
@@ -200,7 +271,14 @@ Emit the report before any edit. Required sections, in order:
 
 1. **Verdict table** — per line/rule: verdict, check ID, tier, one-line why.
 2. **Counter-finding** — at least one line that clearly earns its keep and
-   should not be touched. A report with only cuts has agreement bias.
+   should not be touched. A report with only cuts has agreement bias. It is
+   verified like any other verdict (Phase 4.5) and marked so; an unverified
+   counter-finding is not a counter-finding. Symmetry is required in the
+   other direction too: name at least one CUT/DEMOTE against material that
+   *looks* load-bearing (a dense operational block, a much-cited section),
+   or state explicitly that you looked for one and why none qualified. A
+   report whose only KEEP is unexamined and whose only cuts are cosmetic has
+   agreement bias pointing the other way.
 3. **Considered but rejected** — checks that would normally fire but were
    deliberately not applied here, with the cost-benefit reason.
 4. **Proposed diffs** — unified diffs against the audited files, with every
@@ -215,11 +293,28 @@ Emit the report before any edit. Required sections, in order:
    a draft dropped into a shared checkout is untracked debris. List every
    draft path at the end of the report, and append a ledger line per
    audited file (path, fingerprint, verdict count) for Phase 0 of the next
-   run. Two draft-quality gates, both mandatory:
+   run. **The ledger records outcomes, not just fingerprints:** each line
+   carries `applied: y/n/partial` and `reverted: y/n` for the previous
+   run's verdicts, resolved from `git log` on the audited file since that
+   entry. This skill demands obedience telemetry of the files it audits
+   (E5) while never measuring its own hit rate; the ledger is where that
+   becomes possible, and a CUT the operator silently reverted is the most
+   informative signal the skill can collect about itself. Two draft-quality
+   gates, both mandatory:
    - *Surgical hunks for corrections.* A correction ships as the minimal
      diff touching only the flagged lines; a full-file rewrite belongs to
      generation mode (no existing file) only. Small change surface, few
      inherited claims.
+   - *A correction may not grow the rent.* Doctrine #1 is that every
+     always-loaded line pays rent, so a FIX that lands MORE always-loaded
+     bytes than it removed has traded one defect (wrong) for another
+     (bloated). Report the byte delta of every FIX; a positive delta needs
+     an explicit one-line justification in the verdict row, and the default
+     answer to "this needs more explanation" is DEMOTE the explanation to
+     an on-read doc and leave a pointer. Dogfood receipt: a run's four
+     factual corrections each replaced a wrong clause with a longer right
+     one, growing the always-loaded file while reporting only "4 verified
+     hunks" — the byte cost was never surfaced. [measured-here]
    - *Verify the draft, not just the original.* A draft inherits every
      unverified claim of its source text. Before listing it, re-run the
      R-family reality checks against the draft's own assertions — every
